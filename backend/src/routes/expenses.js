@@ -37,6 +37,61 @@ router.get('/', (req, res) => {
   }
 });
 
+// GET /api/expenses/export — ייצוא הוצאות לקובץ CSV
+// CSV = Comma-Separated Values — פורמט טבלאי פשוט שנפתח ב-Excel
+router.get('/export', (req, res) => {
+  try {
+    const { month, category_id } = req.query;
+
+    let query = `
+      SELECT e.date, e.title, e.amount, c.name AS category_name, e.note
+      FROM expenses e
+      LEFT JOIN categories c ON e.category_id = c.id
+      WHERE e.user_id = ?
+    `;
+    const params = [req.user.id];
+
+    if (category_id) {
+      query += ' AND e.category_id = ?';
+      params.push(category_id);
+    }
+    if (month) {
+      query += " AND strftime('%Y-%m', e.date) = ?";
+      params.push(month);
+    }
+
+    query += ' ORDER BY e.date DESC';
+
+    const expenses = db.prepare(query).all(...params);
+
+    // בניית תוכן ה-CSV
+    // שורה ראשונה = headers, שורות הבאות = נתונים
+    const csvRows = [
+      'Date,Title,Amount,Category,Note',   // header row
+      ...expenses.map(e => [
+        e.date,
+        `"${(e.title || '').replace(/"/g, '""')}"`,        // גרשיים כפולים לטיפול בפסיקים
+        e.amount.toFixed(2),
+        `"${(e.category_name || '').replace(/"/g, '""')}"`,
+        `"${(e.note || '').replace(/"/g, '""')}"`
+      ].join(','))
+    ];
+
+    const csvContent = csvRows.join('\n');
+
+    // שליחת הקובץ כ-download
+    const filename = `expenses_${month || 'all'}_${Date.now()}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    logger.info(`CSV export by user ${req.user.username}: ${expenses.length} rows`);
+    res.send('﻿' + csvContent); // BOM לתמיכה בעברית ב-Excel
+  } catch (err) {
+    logger.error(`CSV export error: ${err.message}`);
+    res.status(500).json({ error: 'Failed to export expenses' });
+  }
+});
+
 // POST /api/expenses — הוספת הוצאה חדשה
 router.post('/', (req, res) => {
   const { title, amount, category_id, date, note } = req.body;
@@ -73,7 +128,6 @@ router.put('/:id', (req, res) => {
   }
 
   try {
-    // וידוא שההוצאה שייכת למשתמש הנוכחי (אבטחה!)
     const existing = db.prepare('SELECT * FROM expenses WHERE id = ? AND user_id = ?').get(id, req.user.id);
     if (!existing) {
       return res.status(404).json({ error: 'Expense not found' });
