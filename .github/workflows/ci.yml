@@ -40,8 +40,12 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       # שלב 3: התקנת build tools ל-better-sqlite3
+      # python-is-python3 יוצר symlink: python -> python3
+      # (node-gyp דורש פקודה בשם "python", לא "python3")
       - name: Install build tools
-        run: sudo apt-get install -y python3 make g++
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y python3 python-is-python3 make g++
 
       # שלב 4: התקנת dependencies
       - name: Install dependencies
@@ -52,6 +56,9 @@ jobs:
       - name: Run tests with coverage
         working-directory: ./backend
         run: npm test
+        env:
+          NODE_ENV: test
+          JWT_SECRET: test_secret_key_for_ci
 
       # שלב 6: העלאת דוח ה-coverage (אופציונלי — לצפייה ב-GitHub)
       - name: Upload coverage report
