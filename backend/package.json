@@ -6,9 +6,9 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
-    "test": "jest --coverage",
-    "test:unit": "jest tests/unit",
-    "test:integration": "jest tests/integration"
+    "test": "jest --coverage --forceExit",
+    "test:unit": "jest tests/unit --forceExit",
+    "test:integration": "jest tests/integration --forceExit"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

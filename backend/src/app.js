@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const { initDB } = require('./db/database');
 const { requestLogger, logger } = require('./middleware/logger');
+const { rateLimit, securityHeaders } = require('./middleware/security');
 const { authenticate } = require('./middleware/authMiddleware');
 
 const authRoutes = require('./routes/auth');
@@ -14,7 +15,9 @@ const PORT = process.env.PORT || 3000;
 
 // --- Middleware ---
 app.use(cors());                    // מאפשר בקשות מה-frontend (פורט אחר)
-app.use(express.json());            // מפרסר JSON מגוף הבקשה
+app.use(express.json());
+app.use(securityHeaders);        // כותרות אבטחה לכל תגובה
+app.use(rateLimit(100, 60000));  // מקסימום 100 בקשות לדקה לכל IP            // מפרסר JSON מגוף הבקשה
 app.use(requestLogger);             // מדפיס כל בקשה ל-log
 
 // --- Routes ציבוריים (ללא התחברות) ---
