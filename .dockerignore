@@ -1,0 +1,10 @@
+# קבצים שלא נרצה להעתיק ל-Container (כמו .gitignore)
+node_modules
+*/node_modules
+*.log
+logs/
+.env
+*.db
+.git
+.gitignore
+README.md

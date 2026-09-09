@@ -1,0 +1,36 @@
+# ALL_LICENSES — רשימת כל הספריות החיצוניות בפרויקט
+
+## Backend Dependencies
+
+| Package | Version | License | Usage |
+|---------|---------|---------|-------|
+| express | ^4.18.2 | MIT | Web framework |
+| better-sqlite3 | ^9.4.3 | MIT | SQLite database |
+| bcryptjs | ^2.4.3 | MIT | Password hashing |
+| jsonwebtoken | ^9.0.2 | MIT | JWT authentication |
+| cors | ^2.8.5 | MIT | Cross-origin requests |
+| dotenv | ^16.4.1 | BSD-2-Clause | Environment variables |
+| winston | ^3.11.0 | MIT | Logging |
+| jest | ^29.7.0 | MIT | Unit testing |
+| supertest | ^6.3.4 | MIT | Integration testing |
+
+## Frontend Dependencies
+
+| Package | Version | License | Usage |
+|---------|---------|---------|-------|
+| react | ^18.2.0 | MIT | UI framework |
+| react-dom | ^18.2.0 | MIT | DOM rendering |
+| react-router-dom | ^6.22.0 | MIT | Client-side routing |
+| axios | ^1.6.7 | MIT | HTTP client |
+| chart.js | ^4.4.2 | MIT | Data visualization |
+| react-chartjs-2 | ^5.2.0 | MIT | React wrapper for Chart.js |
+
+## License Texts
+
+All packages listed above use the MIT License unless noted otherwise.
+
+MIT License summary:
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files, to deal in the Software
+without restriction, including without limitation the rights to use, copy,
+modify, merge, publish, distribute, sublicense, and/or sell copies of the Software.

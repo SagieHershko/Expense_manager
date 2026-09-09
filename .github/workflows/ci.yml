@@ -1,0 +1,103 @@
+# GitHub Actions — CI/CD Pipeline
+#
+# מה זה CI/CD?
+# CI (Continuous Integration) = כל push ל-GitHub מריץ בדיקות אוטומטיות
+# CD (Continuous Deployment) = אם הבדיקות עברו, יוצרים גרסה חדשה
+#
+# ה-pipeline הזה:
+# 1. רץ אוטומטית בכל push ל-main ובכל Pull Request
+# 2. מריץ את הunit tests וה-integration tests
+# 3. בונה את ה-Docker images לוודא שהם תקינים
+# 4. אם ה-push הוא tag של גרסה (v1.0.0) — יוצר GitHub Release
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'         # מופעל גם כשמוסיפים git tag שמתחיל ב-v
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ---- Job 1: בדיקות ----
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest   # GitHub מריץ את זה על Linux חינם
+
+    steps:
+      # שלב 1: הורדת הקוד
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # שלב 2: התקנת Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      # שלב 3: התקנת build tools ל-better-sqlite3
+      - name: Install build tools
+        run: sudo apt-get install -y python3 make g++
+
+      # שלב 4: התקנת dependencies
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci   # npm ci יותר מהיר ומדויק מ-npm install (ל-CI)
+
+      # שלב 5: הרצת הבדיקות עם code coverage
+      - name: Run tests with coverage
+        working-directory: ./backend
+        run: npm test
+
+      # שלב 6: העלאת דוח ה-coverage (אופציונלי — לצפייה ב-GitHub)
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: backend/coverage/
+
+  # ---- Job 2: בניית Docker ----
+  docker-build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: test   # רץ רק אחרי שה-tests עברו
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build ./backend -t expense-manager-backend
+
+      - name: Build frontend image
+        run: docker build ./frontend -t expense-manager-frontend
+
+  # ---- Job 3: יצירת Release (רק כשמוסיפים git tag) ----
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [test, docker-build]
+    # רץ רק אם זה push של tag (כמו v1.0.0), לא push רגיל
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # נדרש כדי לקרוא את כל ה-commit history
+
+      # יצירת Release Notes אוטומטי מה-commit messages
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true   # GitHub יכתוב את ה-changelog אוטומטית
+          body: |
+            ## מה חדש בגרסה הזו?
+            ראה את ה-release notes האוטומטיים למטה.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # token אוטומטי של GitHub

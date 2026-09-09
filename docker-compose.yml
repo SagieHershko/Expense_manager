@@ -1,0 +1,34 @@
+# docker-compose — מנהל מספר Containers יחד
+# במקום להריץ כל container בנפרד, פקודה אחת מפעילה הכל
+
+version: '3.8'
+
+services:
+  # ---- Backend Container ----
+  backend:
+    build:
+      context: ./backend   # Docker יחפש את ה-Dockerfile כאן
+    ports:
+      - "3000:3000"         # port_על_המחשב:port_בcontainer
+    environment:
+      - PORT=3000
+      - JWT_SECRET=expense_manager_super_secret_key_2024
+      - NODE_ENV=production
+    volumes:
+      # שמירת ה-DB מחוץ ל-Container כדי שהנתונים לא יימחקו בכל restart
+      - db_data:/app/expense.db
+      - ./backend/logs:/app/logs
+    restart: unless-stopped   # מפעיל מחדש אוטומטית אם קורסת
+
+  # ---- Frontend Container ----
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "80:80"             # האתר יהיה זמין על http://localhost
+    depends_on:
+      - backend             # מחכה ש-backend יהיה מוכן לפני שעולה
+
+# Volume — אחסון מתמיד שנשמר גם כשה-container נמחק
+volumes:
+  db_data:
