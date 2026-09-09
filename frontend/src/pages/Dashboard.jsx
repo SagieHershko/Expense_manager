@@ -4,6 +4,7 @@ import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Toolti
 import Navbar from '../components/Navbar';
 import ExpenseForm from '../components/ExpenseForm';
 import { getExpenses, createExpense, updateExpense, deleteExpense, getCategories } from '../services/api';
+import api from '../services/api';
 
 // רישום components של Chart.js (חובה לפני שימוש)
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
@@ -16,6 +17,7 @@ export default function Dashboard() {
   const [showModal,   setShowModal]   = useState(false);
   const [editItem,    setEditItem]    = useState(null);
   const [error,       setError]       = useState('');
+  const [exporting,   setExporting]   = useState(false);
 
   // טעינה ראשונית וכל פעם שמשתנים הפילטרים
   useEffect(() => {
@@ -62,6 +64,37 @@ export default function Dashboard() {
       fetchExpenses();
     } catch {
       setError('שגיאה במחיקה');
+    }
+  };
+
+  // ייצוא ל-CSV
+  // שולח בקשה לשרת עם ה-token, מקבל תוכן CSV, ומוריד כקובץ
+  const handleExportCSV = async () => {
+    try {
+      setExporting(true);
+      const params = {};
+      if (filterMonth) params.month = filterMonth;
+      if (filterCat)   params.category_id = filterCat;
+
+      // responseType: 'blob' — מבקש את התגובה כ-Binary Large Object (קובץ)
+      const res = await api.get('/expenses/export', {
+        params,
+        responseType: 'blob'
+      });
+
+      // יצירת כתובת URL זמנית לקובץ ב-זיכרון הדפדפן
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `expenses_${filterMonth || 'all'}.csv`);
+      document.body.appendChild(link);
+      link.click();                         // הפעלת הורדה אוטומטית
+      link.remove();
+      window.URL.revokeObjectURL(url);      // שחרור הזיכרון הזמני
+    } catch {
+      setError('שגיאה בייצוא CSV');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -114,7 +147,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* פילטרים + כפתור הוספה */}
+        {/* פילטרים + כפתורי פעולה */}
         <div className="filter-bar">
           <div className="form-group">
             <label>סינון לפי חודש</label>
@@ -129,6 +162,16 @@ export default function Dashboard() {
           </div>
           <button className="btn btn-primary" style={{ width: 'auto' }} onClick={() => setShowModal(true)}>
             + הוסף הוצאה
+          </button>
+          {/* כפתור ייצוא CSV */}
+          <button
+            className="btn btn-secondary"
+            style={{ width: 'auto' }}
+            onClick={handleExportCSV}
+            disabled={exporting || expenses.length === 0}
+            title="ייצא את ההוצאות המוצגות לקובץ Excel/CSV"
+          >
+            {exporting ? '⏳ מייצא...' : '📥 ייצוא CSV'}
           </button>
         </div>
 
