@@ -1,8 +1,16 @@
 const Database = require('better-sqlite3');
 const path = require('path');
+const fs = require('fs');
 
-// יוצרים את הDB בתיקיית backend — אם לא קיים, ייווצר אוטומטית
-const DB_PATH = path.join(__dirname, '../../expense.db');
+// ה-DB נשמר בתוך תיקיית /app/data בתוך ה-container
+// הvolume ב-docker-compose מחובר ל-/app/data כדי שהנתונים ישמרו
+const DB_DIR  = path.join(__dirname, '../../data');
+const DB_PATH = path.join(DB_DIR, 'expense.db');
+
+// יצירת התיקייה אם לא קיימת (חשוב לפעם הראשונה ב-Docker)
+if (!fs.existsSync(DB_DIR)) {
+  fs.mkdirSync(DB_DIR, { recursive: true });
+}
 
 const db = new Database(DB_PATH);
 

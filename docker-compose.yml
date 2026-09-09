@@ -15,8 +15,9 @@ services:
       - JWT_SECRET=expense_manager_super_secret_key_2024
       - NODE_ENV=production
     volumes:
-      # שמירת ה-DB מחוץ ל-Container כדי שהנתונים לא יימחקו בכל restart
-      - db_data:/app/expense.db
+      # db_data מחובר לתיקיית /app/data — שם נשמר expense.db
+      # כך הנתונים נשמרים גם כשה-container נמחק ומורץ מחדש
+      - db_data:/app/data
       - ./backend/logs:/app/logs
     restart: unless-stopped   # מפעיל מחדש אוטומטית אם קורסת
 
