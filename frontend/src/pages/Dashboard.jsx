@@ -258,19 +258,19 @@ export default function Dashboard() {
 
         {/* ── ניווט חודשים ── */}
         <div className="month-nav">
-          <button className="month-arrow-btn" onClick={() => setNavMonth(prevMonthStr)}>
-            {MONTHS_HE[pm - 1]} &#9654;
-          </button>
-          <div className="month-current">
-            <span className="month-name">{MONTHS_HE[navM - 1]}</span>
-            <span className="month-year">{navY}</span>
-          </div>
           <button
             className="month-arrow-btn"
             onClick={() => setNavMonth(nextMonthStr)}
             disabled={nextMonthStr > today}
           >
-            &#9664; {MONTHS_HE[nm - 1]}
+            {MONTHS_HE[nm - 1]} &#9654;
+          </button>
+          <div className="month-current">
+            <span className="month-name">{MONTHS_HE[navM - 1]}</span>
+            <span className="month-year">{navY}</span>
+          </div>
+          <button className="month-arrow-btn" onClick={() => setNavMonth(prevMonthStr)}>
+            &#9664; {MONTHS_HE[pm - 1]}
           </button>
         </div>
 
@@ -297,7 +297,7 @@ export default function Dashboard() {
 
         {/* ── גרף ── */}
         {expenses.length > 0 && (
-          <div className={`card chart-card ${chartType === 'doughnut' ? 'chart-card-dark' : ''}`}>
+          <div className="card chart-card">
             <div className="chart-header">
               <h3>הוצאות לפי קטגוריה</h3>
               <button
