@@ -9,9 +9,7 @@ const api = axios.create({
 // Request interceptor — מוסיף JWT token לכל בקשה אוטומטית
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
@@ -36,26 +34,20 @@ export const login = (username, password) =>
   api.post('/auth/login', { username, password });
 
 // --- Expenses ---
-export const getExpenses = (filters = {}) =>
-  api.get('/expenses', { params: filters });
-
-export const createExpense = (data) =>
-  api.post('/expenses', data);
-
-export const updateExpense = (id, data) =>
-  api.put(`/expenses/${id}`, data);
-
-export const deleteExpense = (id) =>
-  api.delete(`/expenses/${id}`);
+export const getExpenses  = (filters = {}) => api.get('/expenses', { params: filters });
+export const createExpense = (data)         => api.post('/expenses', data);
+export const updateExpense = (id, data)     => api.put(`/expenses/${id}`, data);
+export const deleteExpense = (id)           => api.delete(`/expenses/${id}`);
 
 // --- Categories ---
-export const getCategories = () =>
-  api.get('/categories');
+export const getCategories = () => api.get('/categories');
 
-export const createCategory = (name) =>
-  api.post('/categories', { name });
+export const createCategory = (name, icon = '🏷️', monthly_budget = null) =>
+  api.post('/categories', { name, icon, monthly_budget });
 
-export const deleteCategory = (id) =>
-  api.delete(`/categories/${id}`);
+export const updateCategory = (id, name, icon, monthly_budget) =>
+  api.put(`/categories/${id}`, { name, icon, monthly_budget });
+
+export const deleteCategory = (id) => api.delete(`/categories/${id}`);
 
 export default api;

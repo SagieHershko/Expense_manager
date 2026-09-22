@@ -2,19 +2,16 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-// ה-DB נשמר בתוך תיקיית /app/data בתוך ה-container
-// הvolume ב-docker-compose מחובר ל-/app/data כדי שהנתונים ישמרו
 const DB_DIR  = path.join(__dirname, '../../data');
 const DB_PATH = path.join(DB_DIR, 'expense.db');
 
-// יצירת התיקייה אם לא קיימת (חשוב לפעם הראשונה ב-Docker)
 if (!fs.existsSync(DB_DIR)) {
   fs.mkdirSync(DB_DIR, { recursive: true });
 }
 
 const db = new Database(DB_PATH);
 
-// WAL mode — מאפשר קריאה וכתיבה במקביל (ביצועים טובים יותר)
+// WAL mode — מאפשר קריאה וכתיבה במקביל
 db.pragma('journal_mode = WAL');
 
 function initDB() {
@@ -38,6 +35,10 @@ function initDB() {
       UNIQUE(name, user_id)
     )
   `);
+
+  // מיגרציה: הוספת עמודות חדשות לקטגוריות (בטוח לריצות חוזרות)
+  try { db.exec(`ALTER TABLE categories ADD COLUMN icon TEXT DEFAULT '🏷️'`); } catch(e) {}
+  try { db.exec(`ALTER TABLE categories ADD COLUMN monthly_budget REAL DEFAULT NULL`); } catch(e) {}
 
   // טבלת הוצאות
   db.exec(`

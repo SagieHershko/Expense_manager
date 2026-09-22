@@ -7,12 +7,12 @@ export default function ExpenseForm({ onSubmit, initialData = null, onCancel }) 
     title: '',
     amount: '',
     category_id: '',
-    date: new Date().toISOString().split('T')[0], // תאריך היום כברירת מחדל
+    date: new Date().toISOString().split('T')[0],
     note: ''
   });
   const [categories, setCategories] = useState([]);
 
-  // אם קיבלנו נתונים ראשוניים (מצב עריכה) — נמלא את הטופס
+  // אם קיבלנו נתונים ראשוניים (מצב עריכה) — ממלאים את הטופס
   useEffect(() => {
     if (initialData) setForm(initialData);
     getCategories().then(res => setCategories(res.data)).catch(() => {});
@@ -39,7 +39,12 @@ export default function ExpenseForm({ onSubmit, initialData = null, onCancel }) 
         <label>קטגוריה</label>
         <select name="category_id" value={form.category_id} onChange={handleChange}>
           <option value="">— ללא קטגוריה —</option>
-          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {categories.map(c => (
+            <option key={c.id} value={c.id}>
+              {c.icon || '🏷️'} {c.name}
+              {c.monthly_budget ? ` (תקציב: ₪${c.monthly_budget})` : ''}
+            </option>
+          ))}
         </select>
       </div>
       <div className="form-group">
