@@ -8,8 +8,8 @@
   --primary-dark:   #5565d8;
   --bg:             #d8dce8;
   --card-bg:        #ffffff;
-  --expense-bg:     #E9EFD7;        /* ירוק-זית עדין */
-  --expense-border: #c5d4aa;
+  --expense-bg:     #eef0fe;        /* לבנדר בהיר — מתאים לצבעי הממשק */
+  --expense-border: #d0d5f5;
   --text:           #2d2f3e;
   --text-muted:     #8892a4;
   --border:         #e0e4ed;
@@ -24,8 +24,8 @@
 body.dark {
   --bg:             #12131f;
   --card-bg:        #1e2035;
-  --expense-bg:     #252845;        /* גוון כחול-כהה לפריטים */
-  --expense-border: #313559;
+  --expense-bg:     #20224a;        /* כחול-כהה עמוק לפריטים */
+  --expense-border: #2e3268;
   --text:           #dde3f0;
   --text-muted:     #7a85a0;
   --border:         #2e3150;
@@ -400,9 +400,9 @@ body.dark .card { background: #1e2035; border-color: rgba(255,255,255,0.04); }
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--expense-border);
   border-right: 4px solid var(--primary);
-  transition: background 0.3s, border-color 0.3s;
+  transition: background 0.3s, border-color 0.3s, box-shadow 0.2s;
 }
-.expense-item:hover { box-shadow: var(--shadow-md); }
+.expense-item:hover { box-shadow: 0 4px 16px rgba(102,126,234,0.2); }
 
 .expense-item .amount  { font-size: 1.1rem; font-weight: 700; color: #ef4444; }
 .expense-item .actions { display: flex; gap: 8px; }
@@ -452,7 +452,9 @@ body.dark .card { background: #1e2035; border-color: rgba(255,255,255,0.04); }
   border-right: 4px solid var(--primary);
   transition: background 0.3s;
   gap: 12px;
+  transition: background 0.3s, box-shadow 0.2s;
 }
+.cat-item:hover { box-shadow: 0 4px 16px rgba(102,126,234,0.2); }
 .cat-info    { display: flex; align-items: center; gap: 12px; }
 .cat-icon    { font-size: 1.8rem; line-height: 1; }
 .cat-name    { font-weight: 600; font-size: 1rem; display: block; }
