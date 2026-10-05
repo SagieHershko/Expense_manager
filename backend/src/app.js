@@ -9,6 +9,7 @@ const { authenticate } = require("./middleware/authMiddleware");
 const authRoutes = require("./routes/auth");
 const expenseRoutes = require("./routes/expenses");
 const categoryRoutes = require("./routes/categories");
+const groupRoutes   = require("./routes/groups");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,6 +33,7 @@ app.get("/api/hello-world", (req, res) => {
 // --- Routes מוגנים (דורשים JWT) ---
 app.use("/api/expenses", authenticate, expenseRoutes);
 app.use("/api/categories", authenticate, categoryRoutes);
+app.use("/api/groups",     authenticate, groupRoutes);
 
 // --- Global error handler ---
 app.use((err, req, res, next) => {

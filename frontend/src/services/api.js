@@ -51,3 +51,24 @@ export const updateCategory = (id, name, icon, monthly_budget) =>
 export const deleteCategory = (id) => api.delete(`/categories/${id}`);
 
 export default api;
+
+// --- Shared Groups ---
+export const getGroups = () =>
+  api.get('/groups').then(r => r.data);
+
+export const createGroup = (name) =>
+  api.post('/groups', { name }).then(r => r.data);
+
+export const inviteToGroup = (groupId, username) =>
+  api.post(`/groups/${groupId}/invite`, { username }).then(r => r.data);
+
+export const acceptGroupInvite = (groupId) =>
+  api.post(`/groups/${groupId}/invite/accept`).then(r => r.data);
+
+// filters: { month: 'YYYY-MM', category_id: number }
+export const getGroupExpenses = (groupId, filters = {}) =>
+  api.get(`/groups/${groupId}/expenses`, { params: filters }).then(r => r.data);
+
+// ייצוא CSV של הוצאות קבוצה — מחזיר blob
+export const exportGroupExpenses = (groupId, filters = {}) =>
+  api.get(`/groups/${groupId}/expenses/export`, { params: filters, responseType: 'blob' });

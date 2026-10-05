@@ -14,7 +14,6 @@ const request = require('supertest');
 const app     = require('../../src/app');
 
 // ---- בדיקות hello-world ----
-// נדרש מפורשות בדרישות הקורס!
 describe('GET /api/hello-world', () => {
   test('מחזיר 200 עם הודעת Hello', async () => {
     const res = await request(app).get('/api/hello-world');

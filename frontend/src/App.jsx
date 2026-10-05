@@ -28,6 +28,9 @@ export default function App() {
             <PrivateRoute><Categories /></PrivateRoute>
           } />
 
+          {/* /shared מפנה לדשבורד עם טאב משותף */}
+          <Route path="/shared" element={<Navigate to="/?tab=shared" replace />} />
+
           {/* כל route לא מוכר → דשבורד */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

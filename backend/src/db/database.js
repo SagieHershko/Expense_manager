@@ -55,6 +55,36 @@ function initDB() {
       FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
     )
   `);
+
+  // =====================================================
+  // טבלאות לפיצ'ר הוצאות משותפות (Shared Groups)
+  // =====================================================
+
+  // קבוצה משותפת — לדוגמה: "אני ושירה 💑"
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS shared_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      owner_id INTEGER NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  // חברי קבוצה — many-to-many בין users לבין shared_groups
+  // status: 'pending' = ממתין לאישור המוזמן, 'accepted' = חבר פעיל
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS group_members (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      joined_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (group_id) REFERENCES shared_groups(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(group_id, user_id)
+    )
+  `);
 }
 
 module.exports = { db, initDB };

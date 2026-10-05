@@ -10,7 +10,7 @@ import Navbar from '../components/Navbar';
 import ExpenseForm from '../components/ExpenseForm';
 import {
   getExpenses, createExpense, updateExpense, deleteExpense, getCategories,
-  getGroups, createGroup, inviteToGroup, acceptGroupInvite, getGroupExpenses,
+  getGroups, createGroup, inviteToGroup, acceptGroupInvite, getGroupExpenses, exportGroupExpenses,
 } from '../services/api';
 import api from '../services/api';
 
@@ -127,6 +127,8 @@ export default function Dashboard() {
   const [inviteUser,    setInviteUser]   = useState('');
   const [showManage,    setShowManage]   = useState(false);
   const [sharedAlert,   setSharedAlert] = useState('');
+  const [sharedFilterCat,  setSharedFilterCat]  = useState('');
+  const [sharedFilterUser, setSharedFilterUser] = useState('');
 
   const showSharedAlert = (msg) => {
     setSharedAlert(msg);
@@ -163,10 +165,12 @@ export default function Dashboard() {
   // ── טעינת הוצאות משותפות ────────────────────────────
   useEffect(() => {
     if (!activeGroup) return;
-    getGroupExpenses(activeGroup.id, { month: navMonth })
+    const params = { month: navMonth };
+    if (sharedFilterCat) params.category_id = sharedFilterCat;
+    getGroupExpenses(activeGroup.id, params)
       .then(({ expenses, summary }) => { setSharedExp(expenses); setSharedSummary(summary); })
       .catch(() => {});
-  }, [activeGroup, navMonth]);
+  }, [activeGroup, navMonth, sharedFilterCat]);
 
   // ── פעולות אישיות ───────────────────────────────────
   const handleAdd = async (formData) => {
@@ -189,6 +193,25 @@ export default function Dashboard() {
     if (!window.confirm('למחוק הוצאה זו?')) return;
     try { await deleteExpense(id); fetchExpenses(); }
     catch { setError('שגיאה במחיקה'); }
+  };
+
+  const handleExportSharedCSV = async () => {
+    if (!activeGroup) return;
+    try {
+      setExporting(true);
+      const params = { month: navMonth };
+      if (sharedFilterCat) params.category_id = sharedFilterCat;
+      const res = await exportGroupExpenses(activeGroup.id, params);
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `shared_expenses_${navMonth}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch { setError('שגיאה בייצוא הוצאות משותפות'); }
+    finally { setExporting(false); }
   };
 
   const handleExportCSV = async () => {
@@ -240,7 +263,10 @@ export default function Dashboard() {
   };
 
   // ── חישובים ─────────────────────────────────────────
-  const activeExpenses  = tab === 'shared' ? sharedExp : expenses;
+  const filteredSharedExp = sharedFilterUser
+    ? sharedExp.filter(e => e.owner_username === sharedFilterUser)
+    : sharedExp;
+  const activeExpenses  = tab === 'shared' ? filteredSharedExp : expenses;
   const total           = activeExpenses.reduce((s, e) => s + e.amount, 0);
   const { year: navY, month: navM } = parseMonth(navMonth);
   const prevMonthStr    = addMonths(navMonth, -1);
@@ -288,9 +314,9 @@ export default function Dashboard() {
     <>
       <Navbar
         onAddExpense={tab === 'personal' ? () => setShowModal(true) : undefined}
-        onExportCSV={tab === 'personal' ? handleExportCSV : undefined}
+        onExportCSV={tab === 'personal' ? handleExportCSV : (activeGroup ? handleExportSharedCSV : undefined)}
         exporting={exporting}
-        expensesExist={expenses.length > 0}
+        expensesExist={tab === 'personal' ? expenses.length > 0 : sharedExp.length > 0}
         activeTab={tab}
         onTabChange={setTab}
       />
@@ -457,7 +483,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── פילטר קטגוריה (רק במצב אישי) ── */}
+        {/* ── פילטר קטגוריה (מצב אישי) ── */}
         {tab === 'personal' && (
           <div className="filter-bar">
             <div className="form-group" style={{ flex: 1, minWidth: 180 }}>
@@ -465,6 +491,28 @@ export default function Dashboard() {
               <select value={filterCat} onChange={e => setFilterCat(e.target.value)}>
                 <option value="">הכל</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.icon || '🏷️'} {c.name}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* ── פילטרים (מצב משותף) ── */}
+        {tab === 'shared' && activeGroup && (
+          <div className="filter-bar">
+            <div className="form-group" style={{ flex: 1, minWidth: 180 }}>
+              <label>סינון לפי קטגוריה</label>
+              <select value={sharedFilterCat} onChange={e => setSharedFilterCat(e.target.value)}>
+                <option value="">הכל</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.icon || '🏷️'} {c.name}</option>)}
+              </select>
+            </div>
+            <div className="form-group" style={{ flex: 1, minWidth: 180 }}>
+              <label>סינון לפי משתמש</label>
+              <select value={sharedFilterUser} onChange={e => setSharedFilterUser(e.target.value)}>
+                <option value="">כולם</option>
+                {Object.keys(sharedSummary).map(user => (
+                  <option key={user} value={user}>{user}</option>
+                ))}
               </select>
             </div>
           </div>
