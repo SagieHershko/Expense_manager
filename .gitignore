@@ -25,3 +25,10 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# SQLite WAL temp files
+*.db-shm
+*.db-wal
+
+# Test coverage output
+coverage/
