@@ -1,13 +1,13 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { db } = require('../db/database');
+const { query } = require('../db/database');
 const { logger } = require('../middleware/logger');
 
 const router = express.Router();
 
 // POST /api/auth/register — הרשמת משתמש חדש
-router.post('/register', (req, res) => {
+router.post('/register', async (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {
@@ -21,14 +21,16 @@ router.post('/register', (req, res) => {
     // bcrypt — מצפין את הסיסמה לפני שמירה ב-DB (אף פעם לא שומרים plain text!)
     const hashedPassword = bcrypt.hashSync(password, 10);
 
-    const stmt = db.prepare('INSERT INTO users (username, password) VALUES (?, ?)');
-    const result = stmt.run(username, hashedPassword);
+    const result = await query(
+      'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id',
+      [username, hashedPassword]
+    );
 
     logger.info(`New user registered: ${username}`);
-    res.status(201).json({ message: 'User created successfully', userId: result.lastInsertRowid });
+    res.status(201).json({ message: 'User created successfully', userId: result.rows[0].id });
   } catch (err) {
-    // UNIQUE constraint — username כבר קיים
-    if (err.message.includes('UNIQUE')) {
+    // unique_violation — username כבר קיים
+    if (err.code === '23505') {
       return res.status(409).json({ error: 'Username already exists' });
     }
     logger.error(`Register error: ${err.message}`);
@@ -37,7 +39,7 @@ router.post('/register', (req, res) => {
 });
 
 // POST /api/auth/login — התחברות
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {
@@ -45,7 +47,7 @@ router.post('/login', (req, res) => {
   }
 
   try {
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+    const user = (await query('SELECT * FROM users WHERE username = $1', [username])).rows[0];
 
     if (!user || !bcrypt.compareSync(password, user.password)) {
       logger.warn(`Failed login attempt for username: ${username}`);

@@ -13,10 +13,13 @@ const logger = winston.createLogger({
   transports: [
     // לוג לקונסול
     new winston.transports.Console(),
-    // לוג לקובץ — כל הלוגים
-    new winston.transports.File({ filename: 'logs/app.log' }),
-    // לוג לקובץ — רק שגיאות
-    new winston.transports.File({ filename: 'logs/errors.log', level: 'error' })
+    // ב-Vercel מערכת הקבצים לקריאה בלבד — מתעדים לקונסול בלבד
+    ...(process.env.VERCEL ? [] : [
+      // לוג לקובץ — כל הלוגים
+      new winston.transports.File({ filename: 'logs/app.log' }),
+      // לוג לקובץ — רק שגיאות
+      new winston.transports.File({ filename: 'logs/errors.log', level: 'error' })
+    ])
   ]
 });
 
