@@ -6,8 +6,6 @@ export default function Navbar({
   onExportCSV,
   exporting,
   expensesExist,
-  activeTab,
-  onTabChange,
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -63,32 +61,12 @@ export default function Navbar({
           קטגוריות
         </Link>
 
-        {/* כפתורי מצב — אישי / משותף (מופיעים רק בדשבורד) */}
-        {onTabChange ? (
-          <div className="navbar-tabs">
-            <button
-              className={`navbar-tab-btn ${activeTab === "personal" ? "active" : ""}`}
-              onClick={() => onTabChange("personal")}
-              title="הוצאות אישיות"
-            >
-              📊 אישי
-            </button>
-            <button
-              className={`navbar-tab-btn ${activeTab === "shared" ? "active" : ""}`}
-              onClick={() => onTabChange("shared")}
-              title="הוצאות משותפות"
-            >
-              💸 משותף
-            </button>
-          </div>
-        ) : (
-          <Link
-            to="/?tab=shared"
-            className="navbar-link-btn"
-          >
-            💸 משותף
-          </Link>
-        )}
+        <Link
+          to="/shared"
+          className={`navbar-link-btn ${isActive("/shared") ? "active" : ""}`}
+        >
+          💸 משותף
+        </Link>
 
         <button
           className="btn btn-dark-toggle"

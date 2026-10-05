@@ -146,6 +146,31 @@ router.post('/:id/invite/accept', (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────
+// POST /api/groups/:id/invite/decline
+// המשתמש המחובר דוחה הזמנה ממתינה — הרשומה נמחקת.
+// ─────────────────────────────────────────────────────
+router.post('/:id/invite/decline', (req, res) => {
+  const groupId = req.params.id;
+
+  try {
+    const result = db.prepare(
+      'DELETE FROM group_members WHERE group_id = ? AND user_id = ? AND status = ?'
+    ).run(groupId, req.user.id, 'pending');
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'No pending invitation found for this group' });
+    }
+
+    logger.info(`${req.user.username} declined invitation to group ${groupId}`);
+    res.json({ message: 'Invitation declined' });
+
+  } catch (err) {
+    logger.error(`Decline invite error: ${err.message}`);
+    res.status(500).json({ error: 'Failed to decline invitation' });
+  }
+});
+
+// ─────────────────────────────────────────────────────
 // GET /api/groups/:id/expenses
 // מחזיר את כל ההוצאות של כל החברים הפעילים בקבוצה.
 // תומך בפילטרים: ?month=2024-01&category_id=3
