@@ -65,6 +65,9 @@ export const inviteToGroup = (groupId, username) =>
 export const acceptGroupInvite = (groupId) =>
   api.post(`/groups/${groupId}/invite/accept`).then(r => r.data);
 
+export const declineGroupInvite = (groupId) =>
+  api.post(`/groups/${groupId}/invite/decline`).then(r => r.data);
+
 // filters: { month: 'YYYY-MM', category_id: number }
 export const getGroupExpenses = (groupId, filters = {}) =>
   api.get(`/groups/${groupId}/expenses`, { params: filters }).then(r => r.data);

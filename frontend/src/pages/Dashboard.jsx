@@ -9,7 +9,6 @@ import Navbar from '../components/Navbar';
 import ExpenseForm from '../components/ExpenseForm';
 import {
   getExpenses, createExpense, updateExpense, deleteExpense, getCategories,
-  getGroups, createGroup, inviteToGroup, acceptGroupInvite, getGroupExpenses, exportGroupExpenses,
 } from '../services/api';
 import api from '../services/api';
 
@@ -110,26 +109,7 @@ export default function Dashboard() {
   const [error,      setError]      = useState('');
   const [exporting,  setExporting]  = useState(false);
   const [chartType,  setChartType]  = useState('doughnut');
-  const [tab,        setTab]        = useState('personal');
 
-  // ── State משותף ─────────────────────────────────────
-  const [groups,        setGroups]       = useState([]);
-  const [activeGroup,   setActiveGroup]  = useState(null);
-  const [sharedExp,     setSharedExp]    = useState([]);
-  const [sharedSummary, setSharedSummary] = useState({});
-  const [newGroupName,  setNewGroupName] = useState('');
-  const [inviteUser,    setInviteUser]   = useState('');
-  const [showManage,    setShowManage]   = useState(false);
-  const [sharedAlert,   setSharedAlert] = useState('');
-  const [sharedFilterCat,  setSharedFilterCat]  = useState('');
-  const [sharedFilterUser, setSharedFilterUser] = useState('');
-
-  const showSharedAlert = (msg) => {
-    setSharedAlert(msg);
-    setTimeout(() => setSharedAlert(''), 4000);
-  };
-
-  // ── טעינה אישית ─────────────────────────────────────
   const fetchExpenses = useCallback(async () => {
     try {
       const params = { month: navMonth };
@@ -144,29 +124,6 @@ export default function Dashboard() {
     getCategories().then(r => setCategories(r.data)).catch(() => {});
   }, [fetchExpenses]);
 
-  // ── טעינת קבוצות ────────────────────────────────────
-  const fetchGroups = async () => {
-    const list = await getGroups().catch(() => []);
-    setGroups(list);
-    if (!activeGroup) {
-      const first = list.find(g => g.status === 'accepted');
-      if (first) setActiveGroup(first);
-    }
-  };
-
-  useEffect(() => { fetchGroups(); }, []);
-
-  // ── טעינת הוצאות משותפות ────────────────────────────
-  useEffect(() => {
-    if (!activeGroup) return;
-    const params = { month: navMonth };
-    if (sharedFilterCat) params.category_id = sharedFilterCat;
-    getGroupExpenses(activeGroup.id, params)
-      .then(({ expenses, summary }) => { setSharedExp(expenses); setSharedSummary(summary); })
-      .catch(() => {});
-  }, [activeGroup, navMonth, sharedFilterCat]);
-
-  // ── פעולות אישיות ───────────────────────────────────
   const handleAdd = async (formData) => {
     try {
       await createExpense(formData);
@@ -189,25 +146,6 @@ export default function Dashboard() {
     catch { setError('שגיאה במחיקה'); }
   };
 
-  const handleExportSharedCSV = async () => {
-    if (!activeGroup) return;
-    try {
-      setExporting(true);
-      const params = { month: navMonth };
-      if (sharedFilterCat) params.category_id = sharedFilterCat;
-      const res = await exportGroupExpenses(activeGroup.id, params);
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `shared_expenses_${navMonth}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch { setError('שגיאה בייצוא הוצאות משותפות'); }
-    finally { setExporting(false); }
-  };
-
   const handleExportCSV = async () => {
     try {
       setExporting(true);
@@ -227,11 +165,7 @@ export default function Dashboard() {
   };
 
   // ── חישובים ─────────────────────────────────────────
-  const filteredSharedExp = sharedFilterUser
-    ? sharedExp.filter(e => e.owner_username === sharedFilterUser)
-    : sharedExp;
-  const activeExpenses  = tab === 'shared' ? filteredSharedExp : expenses;
-  const total           = activeExpenses.reduce((s, e) => s + e.amount, 0);
+  const total           = expenses.reduce((s, e) => s + e.amount, 0);
   const { year: navY, month: navM } = parseMonth(navMonth);
   const prevMonthStr    = addMonths(navMonth, -1);
   const nextMonthStr    = addMonths(navMonth, +1);
@@ -275,12 +209,10 @@ export default function Dashboard() {
   return (
     <>
       <Navbar
-        onAddExpense={tab === 'personal' ? () => setShowModal(true) : undefined}
-        onExportCSV={tab === 'personal' ? handleExportCSV : (activeGroup ? handleExportSharedCSV : undefined)}
+        onAddExpense={() => setShowModal(true)}
+        onExportCSV={handleExportCSV}
         exporting={exporting}
-        expensesExist={tab === 'personal' ? expenses.length > 0 : sharedExp.length > 0}
-        activeTab={tab}
-        onTabChange={setTab}
+        expensesExist={expenses.length > 0}
       />
       <div className="container" style={{ paddingTop: 24 }}>
 
@@ -373,40 +305,16 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── פילטר קטגוריה (מצב אישי) ── */}
-        {tab === 'personal' && (
-          <div className="filter-bar">
-            <div className="form-group" style={{ flex: 1, minWidth: 180 }}>
-              <label>סינון לפי קטגוריה</label>
-              <select value={filterCat} onChange={e => setFilterCat(e.target.value)}>
-                <option value="">הכל</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.icon || '🏷️'} {c.name}</option>)}
-              </select>
-            </div>
+        {/* ── פילטר קטגוריה ── */}
+        <div className="filter-bar">
+          <div className="form-group" style={{ flex: 1, minWidth: 180 }}>
+            <label>סינון לפי קטגוריה</label>
+            <select value={filterCat} onChange={e => setFilterCat(e.target.value)}>
+              <option value="">הכל</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.icon || '🏷️'} {c.name}</option>)}
+            </select>
           </div>
-        )}
-
-        {/* ── פילטרים (מצב משותף) ── */}
-        {tab === 'shared' && activeGroup && (
-          <div className="filter-bar">
-            <div className="form-group" style={{ flex: 1, minWidth: 180 }}>
-              <label>סינון לפי קטגוריה</label>
-              <select value={sharedFilterCat} onChange={e => setSharedFilterCat(e.target.value)}>
-                <option value="">הכל</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.icon || '🏷️'} {c.name}</option>)}
-              </select>
-            </div>
-            <div className="form-group" style={{ flex: 1, minWidth: 180 }}>
-              <label>סינון לפי משתמש</label>
-              <select value={sharedFilterUser} onChange={e => setSharedFilterUser(e.target.value)}>
-                <option value="">כולם</option>
-                {Object.keys(sharedSummary).map(user => (
-                  <option key={user} value={user}>{user}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
+        </div>
 
         {/* ── רשימת הוצאות ── */}
         {expenses.length === 0 ? (

@@ -4,6 +4,7 @@ import Login      from './pages/Login';
 import Register   from './pages/Register';
 import Dashboard  from './pages/Dashboard';
 import Categories from './pages/Categories';
+import SharedExpenses from './pages/SharedExpenses';
 
 // Protected Route — אם אין token מפנה לדף login
 function PrivateRoute({ children }) {
@@ -28,8 +29,9 @@ export default function App() {
             <PrivateRoute><Categories /></PrivateRoute>
           } />
 
-          {/* /shared מפנה לדשבורד עם טאב משותף */}
-          <Route path="/shared" element={<Navigate to="/?tab=shared" replace />} />
+          <Route path="/shared" element={
+            <PrivateRoute><SharedExpenses /></PrivateRoute>
+          } />
 
           {/* כל route לא מוכר → דשבורד */}
           <Route path="*" element={<Navigate to="/" replace />} />

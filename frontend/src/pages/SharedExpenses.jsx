@@ -5,7 +5,10 @@ import {
   createGroup,
   inviteToGroup,
   acceptGroupInvite,
+  declineGroupInvite,
   getGroupExpenses,
+  exportGroupExpenses,
+  getCategories,
 } from '../services/api';
 
 const MONTHS_HE = [
@@ -36,12 +39,14 @@ export default function SharedExpenses() {
   const [alert,         setAlert]         = useState('');
   const [alertType,     setAlertType]     = useState('success');
   const [showManage,    setShowManage]    = useState(false);
+  const [categories,    setCategories]    = useState([]);
+  const [filterCat,     setFilterCat]     = useState('');
+  const [filterUser,    setFilterUser]    = useState('');
+  const [exporting,     setExporting]     = useState(false);
 
   const [y, m] = navMonth.split('-').map(Number);
   const prevMonth = addMonths(navMonth, -1);
   const nextMonth = addMonths(navMonth, +1);
-  const { month: pm } = { month: Number(prevMonth.split('-')[1]) };
-  const { month: nm } = { month: Number(nextMonth.split('-')[1]) };
 
   const showAlert = (msg, type = 'success') => {
     setAlert(msg); setAlertType(type);
@@ -58,15 +63,25 @@ export default function SharedExpenses() {
     }
   };
 
-  useEffect(() => { fetchGroups(); }, []);
+  useEffect(() => {
+    fetchGroups();
+    getCategories().then(r => setCategories(r.data)).catch(() => {});
+  }, []);
 
   // ── טעינת הוצאות ────────────────────────────────────
   useEffect(() => {
     if (!activeGroup) return;
-    getGroupExpenses(activeGroup.id, { month: navMonth })
+    const params = { month: navMonth };
+    if (filterCat) params.category_id = filterCat;
+    getGroupExpenses(activeGroup.id, params)
       .then(({ expenses, summary }) => { setExpenses(expenses); setSummary(summary); })
       .catch(() => showAlert('שגיאה בטעינת ההוצאות', 'error'));
-  }, [activeGroup, navMonth]);
+  }, [activeGroup, navMonth, filterCat]);
+
+  const switchGroup = (group) => {
+    setActiveGroup(group);
+    setFilterUser('');
+  };
 
   const handleCreateGroup = async () => {
     if (!newGroupName.trim()) return;
@@ -97,7 +112,37 @@ export default function SharedExpenses() {
     } catch { showAlert('שגיאה באישור ההזמנה', 'error'); }
   };
 
-  const total        = expenses.reduce((s, e) => s + e.amount, 0);
+  const handleDecline = async (group) => {
+    try {
+      await declineGroupInvite(group.id);
+      await fetchGroups();
+      showAlert(`ההזמנה לקבוצה "${group.name}" נדחתה`);
+    } catch { showAlert('שגיאה בדחיית ההזמנה', 'error'); }
+  };
+
+  const handleExport = async () => {
+    if (!activeGroup) return;
+    try {
+      setExporting(true);
+      const params = { month: navMonth };
+      if (filterCat) params.category_id = filterCat;
+      const res = await exportGroupExpenses(activeGroup.id, params);
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `shared_expenses_${navMonth}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch { showAlert('שגיאה בייצוא הוצאות משותפות', 'error'); }
+    finally { setExporting(false); }
+  };
+
+  const visibleExpenses = filterUser
+    ? expenses.filter(e => e.owner_username === filterUser)
+    : expenses;
+  const total        = visibleExpenses.reduce((s, e) => s + e.amount, 0);
   const pendingGroups  = groups.filter(g => g.status === 'pending');
   const acceptedGroups = groups.filter(g => g.status === 'accepted');
   const pmNum = Number(prevMonth.split('-')[1]);
@@ -120,7 +165,10 @@ export default function SharedExpenses() {
         {pendingGroups.map(g => (
           <div key={g.id} className="alert" style={{ background: '#fef9c3', color: '#713f12', borderColor: '#fde047', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>📨 הוזמנת לקבוצה: <strong>{g.name}</strong></span>
-            <button className="btn btn-secondary" style={{ marginRight: 12 }} onClick={() => handleAccept(g)}>✅ הצטרף</button>
+            <span style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-secondary" onClick={() => handleAccept(g)}>✅ הצטרף</button>
+              <button className="btn btn-danger" onClick={() => handleDecline(g)}>דחה</button>
+            </span>
           </div>
         ))}
 
@@ -135,7 +183,7 @@ export default function SharedExpenses() {
                   <select
                     style={{ border: 'none', background: 'transparent', fontWeight: 600, color: 'var(--primary)', cursor: 'pointer', fontSize: 13 }}
                     value={activeGroup.id}
-                    onChange={e => setActiveGroup(acceptedGroups.find(g => g.id === +e.target.value))}
+                    onChange={e => switchGroup(acceptedGroups.find(g => g.id === +e.target.value))}
                   >
                     {acceptedGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                   </select>
@@ -145,9 +193,16 @@ export default function SharedExpenses() {
               </span>
             )}
           </div>
-          <button className="btn btn-secondary" onClick={() => setShowManage(v => !v)}>
-            ⚙️ {showManage ? 'סגור ניהול' : 'ניהול קבוצות'}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {activeGroup && (
+              <button className="btn btn-secondary" onClick={handleExport} disabled={exporting || expenses.length === 0}>
+                {exporting ? '⏳...' : '📥 ייצוא CSV'}
+              </button>
+            )}
+            <button className="btn btn-secondary" onClick={() => setShowManage(v => !v)}>
+              ⚙️ {showManage ? 'סגור ניהול' : 'ניהול קבוצות'}
+            </button>
+          </div>
         </div>
 
         {/* פאנל ניהול */}
@@ -210,6 +265,26 @@ export default function SharedExpenses() {
           </div>
         )}
 
+        {/* ── פילטרים ── */}
+        {activeGroup && (
+          <div className="filter-bar">
+            <div className="form-group" style={{ flex: 1, minWidth: 180 }}>
+              <label>סינון לפי קטגוריה</label>
+              <select value={filterCat} onChange={e => setFilterCat(e.target.value)}>
+                <option value="">הכל</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.icon || '🏷️'} {c.name}</option>)}
+              </select>
+            </div>
+            <div className="form-group" style={{ flex: 1, minWidth: 180 }}>
+              <label>סינון לפי משתמש</label>
+              <select value={filterUser} onChange={e => setFilterUser(e.target.value)}>
+                <option value="">כולם</option>
+                {Object.keys(summary).map(user => <option key={user} value={user}>{user}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
+
         {/* ── רשימת הוצאות (כמו דשבורד) ── */}
         {!activeGroup ? (
           <div className="card" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 48 }}>
@@ -219,12 +294,12 @@ export default function SharedExpenses() {
               ➕ צור קבוצה
             </button>
           </div>
-        ) : expenses.length === 0 ? (
+        ) : visibleExpenses.length === 0 ? (
           <div className="card" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
             אין הוצאות משותפות ב{MONTHS_HE[m - 1]}
           </div>
         ) : (
-          expenses.map(exp => (
+          visibleExpenses.map(exp => (
             <div className="expense-item" key={exp.id}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <span className="expense-icon">🧾</span>
