@@ -1,90 +1,111 @@
-const Database = require('better-sqlite3');
-const path = require('path');
-const fs = require('fs');
+const { Pool } = require('pg');
 
-const DB_DIR  = path.join(__dirname, '../../data');
-const DB_PATH = path.join(DB_DIR, 'expense.db');
+// ב-production וב-development מתחברים ל-Postgres (Neon / Docker) דרך DATABASE_URL.
+// בבדיקות (NODE_ENV=test) בלי DATABASE_URL משתמשים ב-PGlite — Postgres אמיתי בתוך התהליך, בזיכרון.
+let driver;
 
-if (!fs.existsSync(DB_DIR)) {
-  fs.mkdirSync(DB_DIR, { recursive: true });
+function getDriver() {
+  if (driver) return driver;
+
+  if (process.env.DATABASE_URL) {
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: process.env.VERCEL ? 5 : 10
+    });
+    driver = {
+      async query(text, params) {
+        const res = await pool.query(text, params);
+        return { rows: res.rows, rowCount: res.rowCount };
+      },
+      exec: (sql) => pool.query(sql)
+    };
+  } else if (process.env.NODE_ENV === 'test') {
+    const { PGlite } = require('@electric-sql/pglite');
+    const pg = new PGlite();
+    driver = {
+      async query(text, params) {
+        const res = await pg.query(text, params);
+        return { rows: res.rows, rowCount: res.affectedRows ?? res.rows.length };
+      },
+      exec: (sql) => pg.exec(sql)
+    };
+  } else {
+    throw new Error('DATABASE_URL is not set — point it at a Postgres database (e.g. Neon)');
+  }
+  return driver;
 }
 
-const db = new Database(DB_PATH);
+// query(text, params) → { rows, rowCount }. placeholders בפורמט $1, $2, ...
+function query(text, params = []) {
+  return getDriver().query(text, params);
+}
 
-// WAL mode — מאפשר קריאה וכתיבה במקביל
-db.pragma('journal_mode = WAL');
+// מחרוזת אחת עם כמה פקודות רצה כטרנזקציה אחת; ה-advisory lock מונע race בין cold starts מקבילים
+const SCHEMA = `
+  SELECT pg_advisory_xact_lock(727274);
 
+  CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    created_at TEXT DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+  );
+
+  CREATE TABLE IF NOT EXISTS categories (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    icon TEXT DEFAULT '🏷️',
+    monthly_budget DOUBLE PRECISION DEFAULT NULL,
+    UNIQUE (name, user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS expenses (
+    id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    amount DOUBLE PRECISION NOT NULL,
+    category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    note TEXT,
+    created_at TEXT DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses (user_id, date);
+
+  CREATE TABLE IF NOT EXISTS shared_groups (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+  );
+
+  -- status: 'pending' = ממתין לאישור המוזמן, 'accepted' = חבר פעיל
+  CREATE TABLE IF NOT EXISTS group_members (
+    id SERIAL PRIMARY KEY,
+    group_id INTEGER NOT NULL REFERENCES shared_groups(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending',
+    joined_at TEXT DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
+    UNIQUE (group_id, user_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members (user_id);
+`;
+
+let ready;
+
+// idempotent — קריאות חוזרות מחזירות את אותו promise
 function initDB() {
-  // טבלת משתמשים
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // טבלת קטגוריות
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS categories (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      user_id INTEGER NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      UNIQUE(name, user_id)
-    )
-  `);
-
-  // מיגרציה: הוספת עמודות חדשות לקטגוריות (בטוח לריצות חוזרות)
-  try { db.exec(`ALTER TABLE categories ADD COLUMN icon TEXT DEFAULT '🏷️'`); } catch(e) {}
-  try { db.exec(`ALTER TABLE categories ADD COLUMN monthly_budget REAL DEFAULT NULL`); } catch(e) {}
-
-  // טבלת הוצאות
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS expenses (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      amount REAL NOT NULL,
-      category_id INTEGER,
-      user_id INTEGER NOT NULL,
-      date TEXT NOT NULL,
-      note TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
-    )
-  `);
-
-  // =====================================================
-  // טבלאות לפיצ'ר הוצאות משותפות (Shared Groups)
-  // =====================================================
-
-  // קבוצה משותפת — לדוגמה: "אני ושירה 💑"
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS shared_groups (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      owner_id INTEGER NOT NULL,
-      created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
-
-  // חברי קבוצה — many-to-many בין users לבין shared_groups
-  // status: 'pending' = ממתין לאישור המוזמן, 'accepted' = חבר פעיל
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS group_members (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      group_id INTEGER NOT NULL,
-      user_id INTEGER NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      joined_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (group_id) REFERENCES shared_groups(id) ON DELETE CASCADE,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      UNIQUE(group_id, user_id)
-    )
-  `);
+  if (!ready) {
+    ready = Promise.resolve()
+      .then(() => getDriver().exec(SCHEMA))
+      .catch((err) => {
+        ready = undefined;
+        throw err;
+      });
+  }
+  return ready;
 }
 
-module.exports = { db, initDB };
+module.exports = { query, initDB };

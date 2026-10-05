@@ -5,7 +5,8 @@
 | Package | Version | License | Usage |
 |---------|---------|---------|-------|
 | express | ^4.18.2 | MIT | Web framework |
-| better-sqlite3 | ^9.4.3 | MIT | SQLite database |
+| pg | ^8.13.0 | MIT | PostgreSQL client |
+| @electric-sql/pglite | ^0.2.17 | Apache-2.0 | In-process Postgres for tests |
 | bcryptjs | ^2.4.3 | MIT | Password hashing |
 | jsonwebtoken | ^9.0.2 | MIT | JWT authentication |
 | cors | ^2.8.5 | MIT | Cross-origin requests |

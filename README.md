@@ -13,7 +13,7 @@
 ## Tech Stack
 - **Frontend:** React + Vite
 - **Backend:** Node.js + Express
-- **Database:** SQLite
+- **Database:** PostgreSQL (Neon / Docker)
 - **Auth:** JWT
 - **Container:** Docker + Docker Compose
 - **CI/CD:** GitHub Actions
@@ -55,4 +55,12 @@ npm test
 PORT=3000
 JWT_SECRET=your_secret_key_here
 NODE_ENV=development
+DATABASE_URL=postgres://user:password@host:5432/dbname
 ```
+`DATABASE_URL` נדרש בהרצה רגילה (למשל חיבור ל-Neon). דרך Docker Compose הוא מוגדר אוטומטית. הבדיקות (`npm test`) רצות על Postgres בזיכרון ואינן דורשות DB חיצוני.
+
+## פריסה ל-Vercel
+הפרויקט מוגדר כשני services (`vercel.json`): ה-backend תחת `/api/*` וה-frontend תחת `/*`.
+בהגדרות הפרויקט ב-Vercel יש להגדיר משתני סביבה:
+- `DATABASE_URL` — connection string של Postgres (Neon)
+- `JWT_SECRET` — מחרוזת אקראית וארוכה (לא הערך מ-docker-compose)

@@ -2,9 +2,6 @@
 # node:20-alpine — גרסת Node קטנה ויעילה (Alpine Linux)
 FROM node:20-alpine
 
-# התקנת build tools הנדרשים ל-better-sqlite3 (ספריית native)
-RUN apk add --no-cache python3 make g++
-
 # תיקיית עבודה בתוך ה-Container
 WORKDIR /app
 

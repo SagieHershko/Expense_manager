@@ -4,6 +4,23 @@
 version: '3.8'
 
 services:
+  # ---- Database Container (Postgres) ----
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=expense
+      - POSTGRES_PASSWORD=expense
+      - POSTGRES_DB=expense_manager
+    volumes:
+      # הנתונים נשמרים גם כשה-container נמחק ומורץ מחדש
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U expense -d expense_manager"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   # ---- Backend Container ----
   backend:
     build:
@@ -14,11 +31,12 @@ services:
       - PORT=3000
       - JWT_SECRET=expense_manager_super_secret_key_2024
       - NODE_ENV=production
+      - DATABASE_URL=postgres://expense:expense@db:5432/expense_manager
     volumes:
-      # db_data מחובר לתיקיית /app/data — שם נשמר expense.db
-      # כך הנתונים נשמרים גם כשה-container נמחק ומורץ מחדש
-      - db_data:/app/data
       - ./backend/logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy   # מחכה ש-Postgres יהיה מוכן לחיבורים
     restart: unless-stopped   # מפעיל מחדש אוטומטית אם קורסת
 
   # ---- Frontend Container ----

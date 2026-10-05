@@ -14,12 +14,20 @@ const groupRoutes   = require("./routes/groups");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// מאחורי הפרוקסי של Vercel — req.ip חייב להיקרא מ-X-Forwarded-For, אחרת כל המשתמשים חולקים rate limit
+if (process.env.VERCEL) app.set("trust proxy", 1);
+
 // --- Middleware ---
 app.use(cors()); // מאפשר בקשות מה-frontend (פורט אחר)
 app.use(express.json());
 app.use(securityHeaders); // כותרות אבטחה לכל תגובה
 app.use(rateLimit(100, 60000)); // מקסימום 100 בקשות לדקה לכל IP            // מפרסר JSON מגוף הבקשה
 app.use(requestLogger); // מדפיס כל בקשה ל-log
+
+// מוודא שהסכמה קיימת לפני כל בקשה (cold start ב-serverless / תחילת בדיקות)
+app.use((req, res, next) => {
+  initDB().then(() => next(), next);
+});
 
 // --- Routes ציבוריים (ללא התחברות) ---
 app.use("/api/auth", authRoutes);
@@ -49,12 +57,17 @@ app.use((req, res) => {
 // --- Start server ---
 // מאפשרים export לצורך בדיקות (supertest) מבלי להפעיל listen
 if (require.main === module) {
-  initDB();
-  app.listen(PORT, () => {
-    logger.info(`Server running on port ${PORT}`);
-  });
-} else {
-  initDB();
+  initDB().then(
+    () => {
+      app.listen(PORT, () => {
+        logger.info(`Server running on port ${PORT}`);
+      });
+    },
+    (err) => {
+      logger.error(`Database init failed: ${err.message}`);
+      process.exit(1);
+    }
+  );
 }
 
 module.exports = app;

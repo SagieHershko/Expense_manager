@@ -24,14 +24,6 @@ jobs:
           node-version: '20'
           # אין cache כאן — package-lock.json לא נמצא ב-repo
 
-      # התקנת build tools ל-better-sqlite3
-      # python-is-python3 יוצר symlink: python -> python3
-      # (node-gyp דורש "python", לא "python3")
-      - name: Install build tools
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y python3 python-is-python3 make g++
-
       - name: Install dependencies
         working-directory: ./backend
         run: npm install

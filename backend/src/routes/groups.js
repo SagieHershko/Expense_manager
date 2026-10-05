@@ -1,5 +1,5 @@
 const express = require('express');
-const { db } = require('../db/database');
+const { query } = require('../db/database');
 const { logger } = require('../middleware/logger');
 
 const router = express.Router();
@@ -9,7 +9,7 @@ const router = express.Router();
 // יצירת קבוצה משותפת חדשה.
 // המשתמש שיוצר את הקבוצה נכנס אוטומטית כחבר פעיל (accepted).
 // ─────────────────────────────────────────────────────
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { name } = req.body;
 
   if (!name || name.trim() === '') {
@@ -17,18 +17,20 @@ router.post('/', (req, res) => {
   }
 
   try {
-    // יצירת הקבוצה
-    const group = db.prepare(
-      'INSERT INTO shared_groups (name, owner_id) VALUES (?, ?)'
-    ).run(name.trim(), req.user.id);
-
-    // היוצר נכנס לקבוצה כחבר פעיל מיידית — אין צורך שיאשר הזמנה לעצמו
-    db.prepare(
-      'INSERT INTO group_members (group_id, user_id, status) VALUES (?, ?, ?)'
-    ).run(group.lastInsertRowid, req.user.id, 'accepted');
+    // יצירת הקבוצה והוספת היוצר כחבר פעיל בפקודה אחת (אטומי) —
+    // אין צורך שהיוצר יאשר הזמנה לעצמו
+    const result = await query(
+      `WITH g AS (
+         INSERT INTO shared_groups (name, owner_id) VALUES ($1, $2) RETURNING id
+       )
+       INSERT INTO group_members (group_id, user_id, status)
+       SELECT id, $2, 'accepted' FROM g
+       RETURNING group_id AS id`,
+      [name.trim(), req.user.id]
+    );
 
     logger.info(`Group "${name.trim()}" created by ${req.user.username}`);
-    res.status(201).json({ message: 'Group created', id: group.lastInsertRowid });
+    res.status(201).json({ message: 'Group created', id: result.rows[0].id });
 
   } catch (err) {
     logger.error(`Create group error: ${err.message}`);
@@ -41,27 +43,28 @@ router.post('/', (req, res) => {
 // מחזיר את כל הקבוצות שהמשתמש המחובר חבר בהן (בכל סטטוס).
 // כולל pending — כדי שיוכל לראות הזמנות שממתינות לאישורו.
 // ─────────────────────────────────────────────────────
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const groups = db.prepare(`
-      SELECT
-        g.id,
-        g.name,
-        g.owner_id,
-        g.created_at,
-        gm.status,
-        (
-          SELECT COUNT(*)
-          FROM group_members
-          WHERE group_id = g.id AND status = 'accepted'
-        ) AS member_count
-      FROM shared_groups g
-      JOIN group_members gm ON g.id = gm.group_id
-      WHERE gm.user_id = ?
-      ORDER BY g.created_at DESC
-    `).all(req.user.id);
+    const { rows } = await query(
+      `SELECT
+         g.id,
+         g.name,
+         g.owner_id,
+         g.created_at,
+         gm.status,
+         (
+           SELECT COUNT(*)::int
+           FROM group_members
+           WHERE group_id = g.id AND status = 'accepted'
+         ) AS member_count
+       FROM shared_groups g
+       JOIN group_members gm ON g.id = gm.group_id
+       WHERE gm.user_id = $1
+       ORDER BY g.created_at DESC`,
+      [req.user.id]
+    );
 
-    res.json(groups);
+    res.json(rows);
   } catch (err) {
     logger.error(`Get groups error: ${err.message}`);
     res.status(500).json({ error: 'Failed to fetch groups' });
@@ -73,7 +76,7 @@ router.get('/', (req, res) => {
 // הזמנת משתמש אחר לפי username.
 // רק חבר פעיל בקבוצה יכול להזמין.
 // ─────────────────────────────────────────────────────
-router.post('/:id/invite', (req, res) => {
+router.post('/:id/invite', async (req, res) => {
   const { username } = req.body;
   const groupId = req.params.id;
 
@@ -83,16 +86,20 @@ router.post('/:id/invite', (req, res) => {
 
   try {
     // בדיקה שהמשתמש המזמין הוא חבר פעיל בקבוצה
-    const membership = db.prepare(
-      'SELECT * FROM group_members WHERE group_id = ? AND user_id = ? AND status = ?'
-    ).get(groupId, req.user.id, 'accepted');
+    const membership = (await query(
+      'SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2 AND status = $3',
+      [groupId, req.user.id, 'accepted']
+    )).rows[0];
 
     if (!membership) {
       return res.status(403).json({ error: 'You are not an active member of this group' });
     }
 
     // איתור המשתמש המוזמן לפי username
-    const invitee = db.prepare('SELECT id, username FROM users WHERE username = ?').get(username.trim());
+    const invitee = (await query(
+      'SELECT id, username FROM users WHERE username = $1',
+      [username.trim()]
+    )).rows[0];
     if (!invitee) {
       return res.status(404).json({ error: `User "${username}" not found` });
     }
@@ -102,12 +109,14 @@ router.post('/:id/invite', (req, res) => {
       return res.status(400).json({ error: 'You cannot invite yourself' });
     }
 
-    // INSERT OR IGNORE — אם כבר קיים (pending או accepted), לא תיווצר שגיאה
-    const result = db.prepare(
-      'INSERT OR IGNORE INTO group_members (group_id, user_id, status) VALUES (?, ?, ?)'
-    ).run(groupId, invitee.id, 'pending');
+    // ON CONFLICT DO NOTHING — אם כבר קיים (pending או accepted), לא תיווצר שגיאה
+    const result = await query(
+      `INSERT INTO group_members (group_id, user_id, status) VALUES ($1, $2, $3)
+       ON CONFLICT (group_id, user_id) DO NOTHING`,
+      [groupId, invitee.id, 'pending']
+    );
 
-    if (result.changes === 0) {
+    if (result.rowCount === 0) {
       return res.status(409).json({ error: `${username} is already in this group or was already invited` });
     }
 
@@ -124,15 +133,16 @@ router.post('/:id/invite', (req, res) => {
 // POST /api/groups/:id/invite/accept
 // המשתמש המחובר מאשר את ההזמנה שקיבל לקבוצה.
 // ─────────────────────────────────────────────────────
-router.post('/:id/invite/accept', (req, res) => {
+router.post('/:id/invite/accept', async (req, res) => {
   const groupId = req.params.id;
 
   try {
-    const result = db.prepare(
-      'UPDATE group_members SET status = ? WHERE group_id = ? AND user_id = ? AND status = ?'
-    ).run('accepted', groupId, req.user.id, 'pending');
+    const result = await query(
+      'UPDATE group_members SET status = $1 WHERE group_id = $2 AND user_id = $3 AND status = $4',
+      ['accepted', groupId, req.user.id, 'pending']
+    );
 
-    if (result.changes === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: 'No pending invitation found for this group' });
     }
 
@@ -149,15 +159,16 @@ router.post('/:id/invite/accept', (req, res) => {
 // POST /api/groups/:id/invite/decline
 // המשתמש המחובר דוחה הזמנה ממתינה — הרשומה נמחקת.
 // ─────────────────────────────────────────────────────
-router.post('/:id/invite/decline', (req, res) => {
+router.post('/:id/invite/decline', async (req, res) => {
   const groupId = req.params.id;
 
   try {
-    const result = db.prepare(
-      'DELETE FROM group_members WHERE group_id = ? AND user_id = ? AND status = ?'
-    ).run(groupId, req.user.id, 'pending');
+    const result = await query(
+      'DELETE FROM group_members WHERE group_id = $1 AND user_id = $2 AND status = $3',
+      [groupId, req.user.id, 'pending']
+    );
 
-    if (result.changes === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: 'No pending invitation found for this group' });
     }
 
@@ -176,22 +187,23 @@ router.post('/:id/invite/decline', (req, res) => {
 // תומך בפילטרים: ?month=2024-01&category_id=3
 // מחזיר גם summary — סיכום סכום לפי משתמש (שימושי לממשק).
 // ─────────────────────────────────────────────────────
-router.get('/:id/expenses', (req, res) => {
+router.get('/:id/expenses', async (req, res) => {
   const groupId = req.params.id;
   const { month, category_id } = req.query;
 
   try {
     // וידוא שהמשתמש המחובר הוא חבר פעיל — מניעת גישה לא מורשית
-    const membership = db.prepare(
-      'SELECT * FROM group_members WHERE group_id = ? AND user_id = ? AND status = ?'
-    ).get(groupId, req.user.id, 'accepted');
+    const membership = (await query(
+      'SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2 AND status = $3',
+      [groupId, req.user.id, 'accepted']
+    )).rows[0];
 
     if (!membership) {
       return res.status(403).json({ error: 'Access denied: you are not an active member of this group' });
     }
 
     // שליפת הוצאות של כל החברים הפעילים בקבוצה
-    let query = `
+    let sql = `
       SELECT
         e.*,
         c.name   AS category_name,
@@ -202,23 +214,23 @@ router.get('/:id/expenses', (req, res) => {
       WHERE e.user_id IN (
         SELECT user_id
         FROM group_members
-        WHERE group_id = ? AND status = 'accepted'
+        WHERE group_id = $1 AND status = 'accepted'
       )
     `;
     const params = [groupId];
 
     if (category_id) {
-      query += ' AND e.category_id = ?';
       params.push(category_id);
+      sql += ` AND e.category_id = $${params.length}`;
     }
     if (month) {
-      query += " AND strftime('%Y-%m', e.date) = ?";
       params.push(month);
+      sql += ` AND substr(e.date, 1, 7) = $${params.length}`;
     }
 
-    query += ' ORDER BY e.date DESC';
+    sql += ' ORDER BY e.date DESC';
 
-    const expenses = db.prepare(query).all(...params);
+    const { rows: expenses } = await query(sql, params);
 
     // חישוב סיכום סכום הוצאות לפי משתמש — עבור הצגה בממשק
     const summary = expenses.reduce((acc, e) => {
@@ -240,46 +252,47 @@ router.get('/:id/expenses', (req, res) => {
 // עמודות: תאריך, משתמש, כותרת, סכום, קטגוריה, הערה.
 // תומך בפילטרים: ?month=2024-01&category_id=3
 // ─────────────────────────────────────────────────────
-router.get('/:id/expenses/export', (req, res) => {
+router.get('/:id/expenses/export', async (req, res) => {
   const groupId = req.params.id;
   const { month, category_id } = req.query;
 
   try {
     // וידוא חברות פעילה
-    const membership = db.prepare(
-      'SELECT * FROM group_members WHERE group_id = ? AND user_id = ? AND status = ?'
-    ).get(groupId, req.user.id, 'accepted');
+    const membership = (await query(
+      'SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2 AND status = $3',
+      [groupId, req.user.id, 'accepted']
+    )).rows[0];
 
     if (!membership) {
       return res.status(403).json({ error: 'Access denied: you are not an active member of this group' });
     }
 
     // שם הקבוצה (לשם הקובץ)
-    const group = db.prepare('SELECT name FROM shared_groups WHERE id = ?').get(groupId);
+    const group = (await query('SELECT name FROM shared_groups WHERE id = $1', [groupId])).rows[0];
 
-    let query = `
+    let sql = `
       SELECT e.date, e.title, e.amount, c.name AS category_name, u.username AS owner_username, e.note
       FROM expenses e
       LEFT JOIN categories c ON e.category_id = c.id
       JOIN users u ON e.user_id = u.id
       WHERE e.user_id IN (
-        SELECT user_id FROM group_members WHERE group_id = ? AND status = 'accepted'
+        SELECT user_id FROM group_members WHERE group_id = $1 AND status = 'accepted'
       )
     `;
     const params = [groupId];
 
     if (category_id) {
-      query += ' AND e.category_id = ?';
       params.push(category_id);
+      sql += ` AND e.category_id = $${params.length}`;
     }
     if (month) {
-      query += " AND strftime('%Y-%m', e.date) = ?";
       params.push(month);
+      sql += ` AND substr(e.date, 1, 7) = $${params.length}`;
     }
 
-    query += ' ORDER BY e.date DESC';
+    sql += ' ORDER BY e.date DESC';
 
-    const expenses = db.prepare(query).all(...params);
+    const { rows: expenses } = await query(sql, params);
 
     // בניית CSV — עם עמודת משתמש נוספת לעומת הייצוא האישי
     const csvRows = [
